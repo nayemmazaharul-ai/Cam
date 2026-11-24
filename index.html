@@ -101,78 +101,25 @@
             pointer-events: none;
         }
 
-        .badge {
-            background: rgba(0, 0, 0, 0.65);
-            backdrop-filter: blur(6px);
-            padding: 6px 14px;
-            border-radius: 20px;
-            font-size: 13px;
-            font-weight: 600;
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        /* Resolution & FPS Selector Style */
-        .specs-selector {
-            pointer-events: auto;
-            gap: 6px;
-        }
-
-        .specs-selector select {
-            background: transparent;
-            color: #00e676;
-            border: none;
-            font-size: 13px;
-            font-weight: 700;
-            outline: none;
-            cursor: pointer;
-        }
-
-        .specs-selector select option {
-            background: #111;
-            color: #fff;
-        }
-
-        .rec-dot {
-            width: 10px;
-            height: 10px;
-            background-color: #ff1744;
-            border-radius: 50%;
-            display: none;
-        }
-
-        .recording .rec-dot {
-            display: inline-block;
-            animation: blink 1s infinite;
-        }
-
-        @keyframes blink {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.2; }
-        }
-
-        /* Right Side Control Dock */
+        /* Top-Left Control Dock for Record Button */
         #control-dock {
             position: absolute;
-            right: 20px;
-            top: 50%;
-            transform: translateY(-50%);
+            top: 15px;
+            left: 20px;
             display: flex;
             flex-direction: column;
             gap: 16px;
             background: rgba(15, 15, 15, 0.75);
             backdrop-filter: blur(10px);
-            padding: 12px;
-            border-radius: 40px;
+            padding: 3px;
+            border-radius: 50%;
             border: 1px solid rgba(255, 255, 255, 0.15);
             z-index: 30;
         }
 
         .ctrl-btn {
-            width: 52px;
-            height: 52px;
+            width: 28px;
+            height: 28px;
             border-radius: 50%;
             border: none;
             background: rgba(255, 255, 255, 0.12);
@@ -182,7 +129,7 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            font-size: 10px;
+            font-size: 6.5px;
             font-weight: bold;
             transition: all 0.2s ease;
         }
@@ -197,10 +144,10 @@
         }
 
         .ctrl-btn svg {
-            width: 22px;
-            height: 22px;
+            width: 11px;
+            height: 11px;
             fill: currentColor;
-            margin-bottom: 2px;
+            margin-bottom: 1px;
         }
 
         /* Record Button Specific */
@@ -262,33 +209,12 @@
             <iframe id="cricscore-frame" src="https://nayemmazaharul-ai.github.io/Cricscore/" allowtransparency="true"></iframe>
         </div>
 
-        <!-- Top Status Indicators -->
-        <div id="top-bar">
-            <div class="badge" id="rec-status-badge">
-                <span class="rec-dot"></span>
-                <span id="rec-timer">00:00:00</span>
-            </div>
-            <div class="badge specs-selector">
-                <select id="select-res" title="Select Resolution">
-                    <option value="1080" selected>1080P</option>
-                    <option value="720">720P</option>
-                </select>
-                <span>•</span>
-                <select id="select-fps" title="Select FPS">
-                    <option value="60" selected>60 FPS</option>
-                    <option value="30">30 FPS</option>
-                </select>
-                <span>•</span>
-                <span id="stream-specs">READY</span>
-            </div>
-        </div>
-
-        <!-- Control Buttons (Only Record Button) -->
+        <!-- Control Buttons (Only Record Button at Top-Left) -->
         <div id="control-dock">
             <!-- Record / Stop Button -->
             <button class="ctrl-btn" id="btn-record" title="Start/Stop Recording">
                 <svg id="icon-rec" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/></svg>
-                <span id="text-rec">REC</span>
+                <span id="text-rec">LIVE</span>
             </button>
         </div>
 
@@ -301,11 +227,6 @@
         const btnRecord = document.getElementById('btn-record');
         const textRec = document.getElementById('text-rec');
         const btnForcePortrait = document.getElementById('btn-force-portrait');
-        const recTimer = document.getElementById('rec-timer');
-        const recBadge = document.getElementById('rec-status-badge');
-        const streamSpecs = document.getElementById('stream-specs');
-        const selectRes = document.getElementById('select-res');
-        const selectFps = document.getElementById('select-fps');
         const toast = document.getElementById('toast');
 
         let cameraStream = null;
@@ -317,8 +238,6 @@
         let isRecording = false;
         let useFrontCamera = false;
         let isLandscapeLocked = false;
-        let timerInterval = null;
-        let secondsElapsed = 0;
 
         // Show Toast Message
         function showToast(msg) {
@@ -363,18 +282,7 @@
             showToast('Portrait মোড সক্রিয় হয়েছে');
         });
 
-        // Change Resolution or FPS
-        function handleSpecChange() {
-            if (isRecording) {
-                showToast('রেকর্ডিং চলাকালীন রেজোলিউশন পরিবর্তন করা যাবে না।');
-                return;
-            }
-            startCamera();
-        }
-        selectRes.addEventListener('change', handleSpecChange);
-        selectFps.addEventListener('change', handleSpecChange);
-
-        // Initialize Selected Resolution & FPS Camera & Voice
+        // Initialize 1080p 60fps Camera & Voice
         async function startCamera() {
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
                 showToast('আপনার ব্রাউজার বা HTTPS ছাড়া ক্যামেরা সাপোর্ট করছে না।');
@@ -386,9 +294,9 @@
             }
 
             const facing = useFrontCamera ? 'user' : 'environment';
-            const targetHeight = parseInt(selectRes.value, 10) || 1080;
-            const targetWidth = targetHeight === 1080 ? 1920 : 1280;
-            const targetFps = parseInt(selectFps.value, 10) || 60;
+            const targetHeight = 1080;
+            const targetWidth = 1920;
+            const targetFps = 60;
 
             // Primary selected quality constraints + Fallback constraints so camera & voice never fail
             const constraintOptions = [
@@ -441,28 +349,11 @@
                 await videoElement.play().catch(() => {});
 
                 videoTrack = cameraStream.getVideoTracks()[0];
-                const audioTracks = cameraStream.getAudioTracks();
-
-                // Verify actual achieved resolution, FPS and Mic status
-                const settings = videoTrack.getSettings();
-                const actualHeight = settings.height || targetHeight;
-                const actualFps = Math.round(settings.frameRate || targetFps);
-                const micStatus = audioTracks.length > 0 ? 'MIC ON' : 'NO MIC';
-                streamSpecs.textContent = `${actualHeight}P • ${actualFps} FPS • ${micStatus}`;
 
             } catch (err) {
                 showToast('ক্যামেরা চালু করতে সমস্যা হচ্ছে! পারমিশন চেক করুন।');
                 console.error(err);
             }
-        }
-
-        // Timer Formatting
-        function updateTimer() {
-            secondsElapsed++;
-            const hrs = String(Math.floor(secondsElapsed / 3600)).padStart(2, '0');
-            const mins = String(Math.floor((secondsElapsed % 3600) / 60)).padStart(2, '0');
-            const secs = String(secondsElapsed % 60).padStart(2, '0');
-            recTimer.textContent = `${hrs}:${mins}:${secs}`;
         }
 
         // Get supported MediaRecorder MIME type
@@ -512,8 +403,7 @@
                 const mimeType = getSupportedMimeType();
                 recordedFileExt = mimeType.includes('mp4') ? 'mp4' : 'webm';
 
-                const targetHeight = parseInt(selectRes.value, 10) || 1080;
-                const bitrate = targetHeight === 1080 ? 12000000 : 6000000;
+                const bitrate = 12000000;
 
                 const recorderOptions = mimeType
                     ? { mimeType: mimeType, videoBitsPerSecond: bitrate }
@@ -539,16 +429,10 @@
 
                 mediaRecorder.start(1000);
                 isRecording = true;
-                selectRes.disabled = true;
-                selectFps.disabled = true;
                 btnRecord.classList.add('active');
                 textRec.textContent = 'STOP';
-                recBadge.classList.add('recording');
 
-                secondsElapsed = 0;
-                recTimer.textContent = '00:00:00';
-                timerInterval = setInterval(updateTimer, 1000);
-                showToast(`ফুল স্ক্রিনে ${selectRes.value}p ${selectFps.value}fps রেকর্ডিং শুরু হয়েছে!`);
+                showToast('ফুল স্ক্রিনে 1080p 60fps রেকর্ডিং শুরু হয়েছে!');
 
             } catch (err) {
                 showToast('রেকর্ডিং শুরু করতে সমস্যা হয়েছে: ' + err.message);
@@ -561,12 +445,8 @@
                 mediaRecorder.stop();
             }
             isRecording = false;
-            selectRes.disabled = false;
-            selectFps.disabled = false;
             btnRecord.classList.remove('active');
-            textRec.textContent = 'REC';
-            recBadge.classList.remove('recording');
-            clearInterval(timerInterval);
+            textRec.textContent = 'LIVE';
             showToast('রেকর্ডিং সম্পন্ন! লোকাল স্টোরেজে সেভ হচ্ছে...');
         }
 
@@ -577,7 +457,7 @@
             const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
             a.style.display = 'none';
             a.href = recordedBlobUrl;
-            a.download = `CricScore_Live_${selectRes.value}p_${selectFps.value}fps_${timestamp}.${recordedFileExt}`;
+            a.download = `CricScore_Live_1080p_60fps_${timestamp}.${recordedFileExt}`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
