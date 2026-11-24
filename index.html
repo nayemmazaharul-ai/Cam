@@ -114,6 +114,27 @@
             gap: 8px;
         }
 
+        /* Resolution & FPS Selector Style */
+        .specs-selector {
+            pointer-events: auto;
+            gap: 6px;
+        }
+
+        .specs-selector select {
+            background: transparent;
+            color: #00e676;
+            border: none;
+            font-size: 13px;
+            font-weight: 700;
+            outline: none;
+            cursor: pointer;
+        }
+
+        .specs-selector select option {
+            background: #111;
+            color: #fff;
+        }
+
         .rec-dot {
             width: 10px;
             height: 10px;
@@ -264,8 +285,18 @@
                 <span class="rec-dot"></span>
                 <span id="rec-timer">00:00:00</span>
             </div>
-            <div class="badge">
-                <span id="stream-specs">1080P • 60 FPS</span>
+            <div class="badge specs-selector">
+                <select id="select-res" title="Select Resolution">
+                    <option value="1080" selected>1080P</option>
+                    <option value="720">720P</option>
+                </select>
+                <span>•</span>
+                <select id="select-fps" title="Select FPS">
+                    <option value="60" selected>60 FPS</option>
+                    <option value="30">30 FPS</option>
+                </select>
+                <span>•</span>
+                <span id="stream-specs">READY</span>
             </div>
         </div>
 
@@ -318,6 +349,8 @@
         const recTimer = document.getElementById('rec-timer');
         const recBadge = document.getElementById('rec-status-badge');
         const streamSpecs = document.getElementById('stream-specs');
+        const selectRes = document.getElementById('select-res');
+        const selectFps = document.getElementById('select-fps');
         const toast = document.getElementById('toast');
 
         let cameraStream = null;
@@ -325,6 +358,7 @@
         let mediaRecorder = null;
         let recordedChunks = [];
         let recordedBlobUrl = null;
+        let recordedFileExt = 'webm';
         let isRecording = false;
         let isFlashOn = false;
         let useFrontCamera = false;
@@ -388,7 +422,18 @@
             showToast('Portrait মোড সক্রিয় হয়েছে');
         });
 
-        // Initialize 1080p 60fps Camera & Voice
+        // Change Resolution or FPS
+        function handleSpecChange() {
+            if (isRecording) {
+                showToast('রেকর্ডিং চলাকালীন রেজোলিউশন পরিবর্তন করা যাবে না।');
+                return;
+            }
+            startCamera();
+        }
+        selectRes.addEventListener('change', handleSpecChange);
+        selectFps.addEventListener('change', handleSpecChange);
+
+        // Initialize Selected Resolution & FPS Camera & Voice
         async function startCamera() {
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
                 showToast('আপনার ব্রাউজার বা HTTPS ছাড়া ক্যামেরা সাপোর্ট করছে না।');
@@ -400,16 +445,27 @@
             }
 
             const facing = useFrontCamera ? 'user' : 'environment';
+            const targetHeight = parseInt(selectRes.value, 10) || 1080;
+            const targetWidth = targetHeight === 1080 ? 1920 : 1280;
+            const targetFps = parseInt(selectFps.value, 10) || 60;
 
-            // Primary high quality constraints + Fallback constraints so camera & voice never fail
+            // Primary selected quality constraints + Fallback constraints so camera & voice never fail
             const constraintOptions = [
                 {
                     audio: { echoCancellation: true, noiseSuppression: true },
                     video: {
                         facingMode: { ideal: facing },
-                        width: { ideal: 1920 },
-                        height: { ideal: 1080 },
-                        frameRate: { ideal: 60 }
+                        width: { ideal: targetWidth },
+                        height: { ideal: targetHeight },
+                        frameRate: { ideal: targetFps }
+                    }
+                },
+                {
+                    audio: true,
+                    video: {
+                        facingMode: { ideal: facing },
+                        width: { ideal: targetWidth },
+                        height: { ideal: targetHeight }
                     }
                 },
                 {
@@ -448,8 +504,8 @@
 
                 // Verify actual achieved resolution, FPS and Mic status
                 const settings = videoTrack.getSettings();
-                const actualHeight = settings.height || 720;
-                const actualFps = Math.round(settings.frameRate || 30);
+                const actualHeight = settings.height || targetHeight;
+                const actualFps = Math.round(settings.frameRate || targetFps);
                 const micStatus = audioTracks.length > 0 ? 'MIC ON' : 'NO MIC';
                 streamSpecs.textContent = `${actualHeight}P • ${actualFps} FPS • ${micStatus}`;
 
@@ -493,6 +549,10 @@
 
         // Switch Front/Back Camera
         btnCamSwitch.addEventListener('click', () => {
+            if (isRecording) {
+                showToast('রেকর্ডিং চলাকালীন ক্যামেরা পরিবর্তন করা যাবে না।');
+                return;
+            }
             useFrontCamera = !useFrontCamera;
             startCamera();
         });
@@ -506,22 +566,44 @@
             recTimer.textContent = `${hrs}:${mins}:${secs}`;
         }
 
-        // Start / Stop Recording (Captures Camera + Cricscore Overlay)
+        // Get supported MediaRecorder MIME type
+        function getSupportedMimeType() {
+            const types = [
+                'video/mp4;codecs=avc1,mp4a.40.2',
+                'video/mp4',
+                'video/webm;codecs=vp9,opus',
+                'video/webm;codecs=vp8,opus',
+                'video/webm'
+            ];
+            for (const type of types) {
+                if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(type)) {
+                    return type;
+                }
+            }
+            return '';
+        }
+
+        // Start / Stop Recording (Direct Camera + Mic without Tab Permission)
         btnRecord.addEventListener('click', async () => {
             if (!isRecording) {
-                await startCompositeRecording();
+                await startDirectRecording();
             } else {
-                stopCompositeRecording();
+                stopDirectRecording();
             }
         });
 
-        async function startCompositeRecording() {
+        async function startDirectRecording() {
             try {
-                if (!cameraStream) {
+                if (!cameraStream || cameraStream.getVideoTracks()[0].readyState === 'ended') {
                     await startCamera();
                 }
 
-                // Request Fullscreen for clean 1080p capture
+                if (!cameraStream) {
+                    showToast('ক্যামেরা চালু না থাকায় রেকর্ড শুরু করা যাচ্ছে না।');
+                    return;
+                }
+
+                // Request Fullscreen if available
                 if (document.documentElement.requestFullscreen && !document.fullscreenElement) {
                     await document.documentElement.requestFullscreen().catch(() => {});
                     if (!document.body.classList.contains('allow-portrait')) {
@@ -529,59 +611,40 @@
                     }
                 }
 
-                // Capture Current Tab (Camera + Cricscore Iframe Panel together)
-                const displayStream = await navigator.mediaDevices.getDisplayMedia({
-                    video: {
-                        width: { ideal: 1920 },
-                        height: { ideal: 1080 },
-                        frameRate: { ideal: 60 }
-                    },
-                    audio: true,
-                    preferCurrentTab: true
-                });
-
-                // Combine Microphone Audio from Camera Stream if available
-                const audioTracks = cameraStream ? cameraStream.getAudioTracks() : [];
-                const combinedTracks = [
-                    ...displayStream.getVideoTracks(),
-                    ...audioTracks
-                ];
-                const finalStream = new MediaStream(combinedTracks);
-
                 recordedChunks = [];
-                const mimeType = MediaRecorder.isTypeSupported('video/mp4; codecs=avc1') 
-                    ? 'video/mp4; codecs=avc1' 
-                    : 'video/webm; codecs=vp9';
+                const mimeType = getSupportedMimeType();
+                recordedFileExt = mimeType.includes('mp4') ? 'mp4' : 'webm';
 
-                mediaRecorder = new MediaRecorder(finalStream, {
-                    mimeType: mimeType,
-                    videoBitsPerSecond: 12000000 // 12 Mbps High Bitrate for 1080p 60fps
-                });
+                const targetHeight = parseInt(selectRes.value, 10) || 1080;
+                const bitrate = targetHeight === 1080 ? 12000000 : 6000000;
+
+                const recorderOptions = mimeType
+                    ? { mimeType: mimeType, videoBitsPerSecond: bitrate }
+                    : { videoBitsPerSecond: bitrate };
+
+                mediaRecorder = new MediaRecorder(cameraStream, recorderOptions);
 
                 mediaRecorder.ondataavailable = (event) => {
-                    if (event.data.size > 0) {
+                    if (event.data && event.data.size > 0) {
                         recordedChunks.push(event.data);
                     }
                 };
 
                 mediaRecorder.onstop = () => {
-                    const blob = new Blob(recordedChunks, { type: mimeType });
+                    const blobType = mimeType || 'video/webm';
+                    const blob = new Blob(recordedChunks, { type: blobType });
                     if (recordedBlobUrl) URL.revokeObjectURL(recordedBlobUrl);
                     recordedBlobUrl = URL.createObjectURL(blob);
 
                     // Auto-trigger download to Local Storage
                     saveToLocalStorage();
                     btnSave.style.display = 'flex';
-                    displayStream.getTracks().forEach(t => t.stop());
-                };
-
-                // Stop recording if user stops tab sharing from browser bar
-                displayStream.getVideoTracks()[0].onended = () => {
-                    if (isRecording) stopCompositeRecording();
                 };
 
                 mediaRecorder.start(1000);
                 isRecording = true;
+                selectRes.disabled = true;
+                selectFps.disabled = true;
                 btnRecord.classList.add('active');
                 textRec.textContent = 'STOP';
                 recBadge.classList.add('recording');
@@ -590,19 +653,21 @@
                 secondsElapsed = 0;
                 recTimer.textContent = '00:00:00';
                 timerInterval = setInterval(updateTimer, 1000);
-                showToast('1080p 60fps লাইভ রেকর্ডিং শুরু হয়েছে!');
+                showToast(`${selectRes.value}p ${selectFps.value}fps রেকর্ডিং শুরু হয়েছে!`);
 
             } catch (err) {
-                showToast('রেকর্ডিং শুরু হয়নি। ট্যাব শেয়ার পারমিশন দিন।');
+                showToast('রেকর্ডিং শুরু করতে সমস্যা হয়েছে: ' + err.message);
                 console.error(err);
             }
         }
 
-        function stopCompositeRecording() {
+        function stopDirectRecording() {
             if (mediaRecorder && mediaRecorder.state !== 'inactive') {
                 mediaRecorder.stop();
             }
             isRecording = false;
+            selectRes.disabled = false;
+            selectFps.disabled = false;
             btnRecord.classList.remove('active');
             textRec.textContent = 'REC';
             recBadge.classList.remove('recording');
@@ -617,7 +682,7 @@
             const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
             a.style.display = 'none';
             a.href = recordedBlobUrl;
-            a.download = `CricScore_Live_${timestamp}.mp4`;
+            a.download = `CricScore_Live_${selectRes.value}p_${selectFps.value}fps_${timestamp}.${recordedFileExt}`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
